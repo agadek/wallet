@@ -3,17 +3,18 @@ package org.wallet
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.scalatest.{FunSpec, FunSpecLike, Matchers}
-import org.wallet.Account.{CurrentBalance, _}
+import org.wallet.account.Account.{CurrentBalance, _}
+import org.wallet.account.AccountActor
 
 
 class AccountActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with FunSpecLike with Matchers with ImplicitSender{
 
   describe("AccountActor should process given commands") {
-    it("generate event and add balance") {
+    it("add balance and respond") {
       //given
       val amount = 100d
       val id = "testId"
-      val account = system.actorOf(AccountActor.props(id))
+      val account = system.actorOf(AccountActor.props(), id)
       val probe = TestProbe()
       //when
       val command = Deposit(amount)
@@ -25,12 +26,12 @@ class AccountActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fun
       probe.expectMsg(CurrentBalance(amount))
     }
 
-    it("generate event and withdraw balance") {
+    it("withdraw balance and respond") {
       //given
       val amount = 100d
       val id = "testId"
       val probe = TestProbe()
-      val account = system.actorOf(AccountActor.props(id))
+      val account = system.actorOf(AccountActor.props(), id)
       account ! Deposit(amount)
       probe.send(account, GetBalance())
       probe.expectMsg(CurrentBalance(amount))
@@ -45,12 +46,12 @@ class AccountActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fun
       probe.expectMsg(CurrentBalance(0d))
     }
 
-    it("generate event and refuse withdraw below 0d") {
+    it("refuse withdraw below 0d") {
       //given
       val amount = 100d
       val id = "testId"
       val probe = TestProbe()
-      val account = system.actorOf(AccountActor.props(id))
+      val account = system.actorOf(AccountActor.props(), id)
       account ! Deposit(amount-1d)
       probe.send(account, GetBalance())
       probe.expectMsg(CurrentBalance(amount-1d))

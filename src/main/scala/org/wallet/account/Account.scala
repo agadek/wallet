@@ -1,7 +1,6 @@
-package org.wallet
+package org.wallet.account
 
-import org.wallet.Account._
-
+import org.wallet.account.Account._
 
 case class Account(id: String, balance: Double) {
 

@@ -1,9 +1,12 @@
-package org.wallet
+package org.wallet.account
 
 import akka.actor.{Actor, ActorLogging, Props}
 
 
-class AccountActor(id: String) extends Actor with ActorLogging {
+class AccountActor() extends Actor with ActorLogging {
+
+  val id = self.path.name
+
 
   override def receive: Receive = normal(Account(id, 0d))
 
@@ -19,5 +22,5 @@ class AccountActor(id: String) extends Actor with ActorLogging {
 }
 
 object AccountActor{
-  def props(id:String) = Props(new AccountActor(id))
+  def props() = Props(new AccountActor())
 }

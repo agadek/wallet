@@ -1,7 +1,8 @@
 package org.wallet
 
 import org.scalatest.{FunSpec, Matchers}
-import org.wallet.Account._
+import org.wallet.account.Account
+import org.wallet.account.Account._
 
 
 class AccountSpec extends FunSpec with Matchers {
