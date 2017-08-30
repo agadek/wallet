@@ -3,6 +3,7 @@ package org.wallet
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import org.wallet.account.{Account, AccountActor}
+import org.wallet.service.AccountService
 
 class WalletApp extends App {
   implicit val system: ActorSystem = ActorSystem("wallet-system")
@@ -11,11 +12,11 @@ class WalletApp extends App {
   val numberOfShards = 100
 
   val extractEntityId: ShardRegion.ExtractEntityId = {
-    case e => e.toString -> e
+    case e => ???
       }
 
   val extractShardId: ShardRegion.ExtractShardId = {
-    case _ => 1.toString
+    case _ => ???
   }
 
 
@@ -25,6 +26,9 @@ class WalletApp extends App {
     settings = ClusterShardingSettings(system),
     extractEntityId = extractEntityId,
     extractShardId = extractShardId)
+
+
+  val accountsService = new AccountService(accountsShard)
 
 
 }

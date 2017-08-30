@@ -1,7 +1,6 @@
-package org.wallet
+package org.wallet.account
 
 import org.scalatest.{FunSpec, Matchers}
-import org.wallet.account.Account
 import org.wallet.account.Account._
 
 

@@ -8,7 +8,7 @@ case class Account(id: String, balance: Double) {
     command match {
       case Deposit(amount) => Deposited(amount)
       case Withdraw(amount) if checkBalance(amount) => Withdrawn(amount)
-      case Withdraw(amount) => InsufficientFunds()
+      case Withdraw(_) => InsufficientFunds()
       case GetBalance() => CurrentBalance(balance)
     }
   }
