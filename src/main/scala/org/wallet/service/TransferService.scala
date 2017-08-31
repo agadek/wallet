@@ -14,9 +14,10 @@ class TransferService(transferShard: ActorRef) {
   implicit val timeout = Timeout(5 seconds)
 
 
-  def transfer(donorId: String, recipientId: String, amount: Double): Future[TransferActor.Event] =
-    (transferShard ? SyncTransfer(donorId, recipientId, amount)).mapTo[TransferActor.Event]
+  def transfer(transferId:String, donorId: String, recipientId: String, amount: Double): Future[TransferActor.Event] =
+    (transferShard ? SyncTransfer(transferId, donorId, recipientId, amount)).mapTo[TransferActor.Event]
 
+  //todo add async transfer
 
   def transferState(transactionId: String): Future[TransferActor.State] =
     (transferShard ? GetState(transactionId)).mapTo[TransferActor.State]

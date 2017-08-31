@@ -1,6 +1,7 @@
 package org.wallet.account
 
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 
 
 class AccountActor() extends Actor with ActorLogging {
@@ -23,4 +24,23 @@ class AccountActor() extends Actor with ActorLogging {
 
 object AccountActor{
   def props() = Props(new AccountActor())
+
+  private val numberOfShards = 10
+
+  private val extractEntityId: ShardRegion.ExtractEntityId = {
+    case command:Account.Command => (command.id , command)
+  }
+
+  private val extractShardId: ShardRegion.ExtractShardId = {
+    case command:Account.Command => scala.math.abs(command.id.hashCode % numberOfShards).toString
+  }
+
+  def shard(system:ActorSystem): ActorRef = ClusterSharding(system).start(
+    typeName = "account",
+    entityProps = AccountActor.props(),
+    settings = ClusterShardingSettings(system),
+    extractEntityId = extractEntityId,
+    extractShardId = extractShardId)
+
+
 }

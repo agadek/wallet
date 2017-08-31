@@ -5,7 +5,7 @@ import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
 import org.scalatest.{FunSpecLike, Matchers}
 import org.wallet.account.AccountActor
-import org.wallet.service.ServiceResponse.{Fail, Success}
+import org.wallet.service.AccountService.{Fail, Success}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -25,19 +25,25 @@ class AccountServiceSpec extends TestKit(ActorSystem("AccountServiceSpec")) with
       val withdrawAmount = 10d
 
       //when
-      val Success(zeroBalance) = Await.result(service.getBalance(id), timeout.duration)
-      val Success(afterDepositBalance) = Await.result(service.deposit(id, depositAmount), timeout.duration)
-      val Success(withdawnAmount) = Await.result(service.withdraw(id, withdrawAmount), timeout.duration)
-      val Fail(refusedWithdrawal) = Await.result(service.withdraw(id, depositAmount), timeout.duration)
-      val Success(finnalBalance) = Await.result(service.getBalance(id), timeout.duration)
+      val Success(0d, zeroBalance) = Await.result(service.getBalance(id), timeout.duration) //0d
+      val Success(depositedAmount, afterDepositBalance) = Await.result(service.deposit(id, depositAmount), timeout.duration) //+100d
+      val Success(withdrawnAmount,  afterWithdrawalBalance) = Await.result(service.withdraw(id, withdrawAmount), timeout.duration)//-10d
+      val Fail(notWithdrawnAmount, afterRefusedWithdrawalBalance) = Await.result(service.withdraw(id, depositAmount), timeout.duration)
+      val Success(0d, finalBalance) = Await.result(service.getBalance(id), timeout.duration)
 
 
       //expected
       zeroBalance shouldBe 0d
+      depositedAmount shouldBe depositAmount
       afterDepositBalance shouldBe depositAmount
-      withdawnAmount shouldBe withdrawAmount
-      refusedWithdrawal shouldBe 0d
-      finnalBalance shouldBe depositAmount-withdrawAmount
+
+      withdrawnAmount shouldBe -withdrawAmount
+      afterWithdrawalBalance shouldBe depositAmount-withdrawAmount
+
+      notWithdrawnAmount shouldBe -depositAmount
+      afterRefusedWithdrawalBalance shouldBe depositAmount-withdrawAmount
+
+      finalBalance shouldBe depositAmount-withdrawAmount
     }
   }
 }

@@ -3,6 +3,7 @@ package org.wallet.transfer
 import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.scalatest.{FunSpecLike, Matchers}
+import org.wallet.service.AccountService.{Fail, Success}
 import org.wallet.transfer.TransferActor.{InsufficientFunds, SyncTransfer, Transferred}
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -15,39 +16,41 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
     it("transfer happy path") {
       //given
       val amount = 100d
+      val tid = "123"
       val did = "acc1"
       val rid = "acc1"
 
       val probe = TestProbe()
       val transfer = system.actorOf(TransferActor.props(
-        deposit = (id: String, amount: Double) => Future(amount),
-        withdraw = (id: String, amount: Double) => Future(amount)))
+        deposit = (id: String, change: Double) => Future(Success(change, change)),
+        withdraw = (id: String, change: Double) => Future(Success(change, 13d))), tid)
 
       //when
-      val command = SyncTransfer(did, rid, amount)
+      val command = SyncTransfer(tid, did, rid, amount)
       val event = probe.send(transfer, command)
 
       //expected
-      val response = probe.expectMsg(Transferred(did, rid, amount))
+      val response = probe.expectMsg(Transferred(did, rid, amount, 13d))
     }
 
     it("transfer fail because low balance") {
       //given
       val amount = 100d
+      val tid = "1234"
       val did = "acc1"
       val rid = "acc1"
 
       val probe = TestProbe()
       val transfer = system.actorOf(TransferActor.props(
-        deposit = (id: String, amount: Double) => Future(amount),
-        withdraw = (id: String, amount: Double) => Future(0d)))
+        deposit = (id: String, change: Double) => Future(Success(change, change)),
+        withdraw = (id: String, change: Double) => Future(Fail(change, 10d))), tid)
 
       //when
-      val command = SyncTransfer(did, rid, amount)
+      val command = SyncTransfer(tid, did, rid, amount)
       val event = probe.send(transfer, command)
 
       //expected
-      val response = probe.expectMsg(InsufficientFunds(did, rid, amount))
+      val response = probe.expectMsg(InsufficientFunds(did, rid, amount, 10d))
     }
   }
 }

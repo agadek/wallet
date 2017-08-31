@@ -1,34 +1,20 @@
 package org.wallet
 
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
-import org.wallet.account.{Account, AccountActor}
-import org.wallet.service.AccountService
+import org.wallet.account.AccountActor
+import org.wallet.service.{AccountService, TransferService}
+import org.wallet.transfer.TransferActor
 
 class WalletApp extends App {
   implicit val system: ActorSystem = ActorSystem("wallet-system")
 
-
-  val numberOfShards = 100
-
-  val extractEntityId: ShardRegion.ExtractEntityId = {
-    case e => ???
-      }
-
-  val extractShardId: ShardRegion.ExtractShardId = {
-    case _ => ???
-  }
-
-
-  val accountsShard = ClusterSharding(system).start(
-    typeName = "account",
-    entityProps = AccountActor.props(),
-    settings = ClusterShardingSettings(system),
-    extractEntityId = extractEntityId,
-    extractShardId = extractShardId)
-
+  val accountsShard = AccountActor.shard(system)
 
   val accountsService = new AccountService(accountsShard)
+
+  val transferShard = TransferActor.shard(system, accountsService.deposit, accountsService.withdraw)
+
+  val transferService = new TransferService(transferShard)
 
 
 }

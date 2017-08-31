@@ -1,14 +1,18 @@
 package org.wallet.transfer
 
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.pattern.pipe
+import org.wallet.account.{Account, AccountActor}
+import org.wallet.service.AccountService
 import org.wallet.transfer.TransferActor._
 
 import scala.concurrent.Future
 
-class TransferActor(deposit:(String,Double) => Future[Double],
-                    withdraw:(String,Double) => Future[Double]) extends Actor with ActorLogging {
+
+class TransferActor(deposit:Deposit,
+                    withdraw:Withdraw) extends Actor with ActorLogging {
 
   val transferId: String = self.path.name
 
@@ -18,37 +22,35 @@ class TransferActor(deposit:(String,Double) => Future[Double],
   var source: Option[ActorRef] = None
 
   override def receive: Receive = {
-    case transfer@SyncTransfer(donorId, _, amount) =>
+    case transfer:Transfer =>
       log.info("transfer {} processing: {}", transferId, transfer)
-      withdraw(donorId, amount) pipeTo self
+      withdraw(transfer.donorId, transfer.amount) pipeTo self
       command = Some(transfer)
-      source = Some(sender())
-      context become withdrawalState()
 
-    case transfer@AsyncTransfer(donorId, _, amount) =>
-      log.info("transfer {} processing: {}", transferId, transfer)
-      withdraw(donorId, amount) pipeTo self
-      command = Some(transfer)
+     transfer match {
+       case _:SyncTransfer => source = Some(sender())
+       case _ =>
+     }
       context become withdrawalState()
 
     case GetState(_) => sender() ! Uninitialized()
   }
 
   def withdrawalState(): Receive = {
-    case amount:Double if amount > 0 =>
+    case AccountService.Success(amount, balance) =>
       log.info("transfer {} withdrawal succeeded", transferId)
       command.foreach { command =>
        deposit(command.recipientId, command.amount) pipeTo self
       }
-      context become depositState()
+      context become depositState(balance)
 
-    case amount:Double =>
+    case AccountService.Fail(amount, balance) =>
       log.info("transfer {} withdrawal failed", transferId)
-      context become failedState()
+      context become failedState(balance)
       for {
         source <- source
         command <- command
-      } yield source ! InsufficientFunds(command.donorId, command.recipientId, command.amount)
+      } yield source ! InsufficientFunds(command.donorId, command.recipientId, command.amount, balance)
 
     case GetState(_) =>
       command.foreach { command =>
@@ -56,14 +58,14 @@ class TransferActor(deposit:(String,Double) => Future[Double],
       }
   }
 
-  def depositState(): Receive = {
-    case amount:Double =>
+  def depositState(donorBalance:Double): Receive = {
+    case AccountService.Success(amount, balance) =>
       log.info("transfer {} deposit succeeded", transferId)
-      context become successState()
+      context become successState(donorBalance)
       for {
         source <- source
         command <- command
-      } yield source ! Transferred(command.donorId, command.recipientId, command.amount)
+      } yield source ! Transferred(command.donorId, command.recipientId, command.amount, donorBalance)
 
     case GetState(_) =>
       command.foreach { command =>
@@ -71,25 +73,27 @@ class TransferActor(deposit:(String,Double) => Future[Double],
       }
   }
 
-  def successState(): Receive = {
+  def successState(donorBalance:Double): Receive = {
     case GetState(_) =>
       command.foreach { command =>
         sender() ! Succeeded(command.donorId, command.recipientId, command.amount)
       }
   }
 
-  def failedState():Receive= {
+  def failedState(donorBalance:Double):Receive= {
     case GetState(_) =>
       command.foreach { command =>
-        sender() ! InsufficientFunds(command.donorId, command.recipientId, command.amount)
+        sender() ! InsufficientFunds(command.donorId, command.recipientId, command.amount, donorBalance)
       }
   }
 }
 
 
 object TransferActor {
+  type Deposit = (String,Double) => Future[AccountService.Response]
+  type Withdraw = (String,Double) => Future[AccountService.Response]
 
-  sealed trait State
+    sealed trait State
 
   case class Uninitialized() extends State
 
@@ -104,22 +108,44 @@ object TransferActor {
 
   sealed trait Command
   sealed trait Transfer{
+    val transferId: String
     val donorId: String
     val recipientId: String
     val amount: Double
   }
 
-  case class SyncTransfer(donorId: String, recipientId: String, amount: Double) extends Transfer
-  case class AsyncTransfer(donorId: String, recipientId: String, amount: Double) extends Transfer
+  case class SyncTransfer(transferId: String, donorId: String, recipientId: String, amount: Double) extends Transfer
+  case class AsyncTransfer(transferId: String, donorId: String, recipientId: String, amount: Double) extends Transfer
 
   case class GetState(transferId: String) extends Command
 
   sealed trait Event
 
-  case class Transferred(donorId: String, recipientId: String, amount: Double)
+  case class Transferred(donorId: String, recipientId: String, amount: Double, donorBalance:Double)
 
-  case class InsufficientFunds(donorId: String, recipientId: String, amount: Double)
+  case class InsufficientFunds(donorId: String, recipientId: String, amount: Double, donorBalance:Double)
 
-  def props(deposit:(String,Double) => Future[Double],
-            withdraw:(String,Double) => Future[Double]) = Props(new TransferActor(deposit,withdraw))
+  def props(deposit:Deposit,
+            withdraw:Withdraw) = Props(new TransferActor(deposit,withdraw))
+
+
+
+  private val numberOfShards = 10
+
+  private val extractEntityId: ShardRegion.ExtractEntityId = {
+    case transfer:Transfer => (transfer.transferId , transfer)
+  }
+
+  private val extractShardId: ShardRegion.ExtractShardId = {
+    case transfer:Transfer=> scala.math.abs(transfer.transferId.hashCode % numberOfShards).toString
+  }
+
+  def shard(system:ActorSystem,
+            deposit:Deposit,
+            withdraw:Withdraw): ActorRef = ClusterSharding(system).start(
+    typeName = "transfer",
+    entityProps = props(deposit,withdraw),
+    settings = ClusterShardingSettings(system),
+    extractEntityId = extractEntityId,
+    extractShardId = extractShardId)
 }
