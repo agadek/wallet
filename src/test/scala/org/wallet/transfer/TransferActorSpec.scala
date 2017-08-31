@@ -30,7 +30,7 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val event = probe.send(transfer, command)
 
       //expected
-      val response = probe.expectMsg(Transferred(did, rid, amount, 13d))
+      val response = probe.expectMsg(Transferred(tid, did, rid, amount, 13d))
     }
 
     it("transfer fail because low balance") {
@@ -50,7 +50,7 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val event = probe.send(transfer, command)
 
       //expected
-      val response = probe.expectMsg(InsufficientFunds(did, rid, amount, 10d))
+      val response = probe.expectMsg(InsufficientFunds(tid, did, rid, amount, 10d))
     }
   }
 }
