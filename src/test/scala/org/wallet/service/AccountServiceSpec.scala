@@ -28,7 +28,7 @@ class AccountServiceSpec extends TestKit(ActorSystem("AccountServiceSpec")) with
       val Success(0d, zeroBalance) = Await.result(service.getBalance(id), timeout.duration) //0d
       val Success(depositedAmount, afterDepositBalance) = Await.result(service.deposit(id, depositAmount), timeout.duration) //+100d
       val Success(withdrawnAmount,  afterWithdrawalBalance) = Await.result(service.withdraw(id, withdrawAmount), timeout.duration)//-10d
-      val Fail(notWithdrawnAmount, afterRefusedWithdrawalBalance) = Await.result(service.withdraw(id, depositAmount), timeout.duration)
+      val Fail(notWithdrawnAmount, afterRefusedWithdrawalBalance, _) = Await.result(service.withdraw(id, depositAmount), timeout.duration)
       val Success(0d, finalBalance) = Await.result(service.getBalance(id), timeout.duration)
 
 

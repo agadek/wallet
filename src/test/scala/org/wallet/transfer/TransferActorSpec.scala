@@ -33,7 +33,7 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val response = probe.expectMsg(Transferred(tid, did, rid, amount, 13d))
     }
 
-    it("transfer fail because low balance") {
+    it("transfer fails because low balance") {
       //given
       val amount = 100d
       val tid = "1234"
@@ -43,7 +43,7 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val probe = TestProbe()
       val transfer = system.actorOf(TransferActor.props(
         deposit = (id: String, change: Double) => Future(Success(change, change)),
-        withdraw = (id: String, change: Double) => Future(Fail(change, 10d))), tid)
+        withdraw = (id: String, change: Double) => Future(Fail(change, 10d, ""))), tid)
 
       //when
       val command = SyncTransfer(tid, did, rid, amount)

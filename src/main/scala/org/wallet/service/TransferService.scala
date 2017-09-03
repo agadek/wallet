@@ -3,7 +3,7 @@ package org.wallet.service
 import akka.actor.ActorRef
 import akka.pattern.ask
 import akka.util.Timeout
-import org.wallet.service.TransferService.{Accepted, Incorrect, TransferResult}
+import org.wallet.service.TransferService._
 import org.wallet.transfer.TransferActor
 import org.wallet.transfer.TransferActor._
 
@@ -22,13 +22,12 @@ class TransferService(transferShard: ActorRef) {
       getOrElse {
         (transferShard ? SyncTransfer(uuid(), donorId, recipientId, amount)).mapTo[TransferActor.Event].
           map {
-            case t:TransferActor.Transferred =>
-              TransferService.Transfered(t.transferId, t.donorId, t.recipientId, t.amount, t.donorBalance)
+            case t: TransferActor.Transferred =>
+              TransferService.Transferred(t.transferId, t.donorId, t.recipientId, t.amount, t.donorBalance)
 
-            case t:TransferActor.InsufficientFunds =>
+            case t: TransferActor.InsufficientFunds =>
               TransferService.InsufficientFunds(t.transferId, t.donorId, t.recipientId, t.amount, t.donorBalance)
           }
-
       }
   }
 
@@ -40,26 +39,24 @@ class TransferService(transferShard: ActorRef) {
     }
   }
 
+  private def uuid() = java.util.UUID.randomUUID.toString
 
-  def transferState(transactionId: String): Future[TransferActor.State] =
-    (transferShard ? GetState(transactionId)).mapTo[TransferActor.State]
-
-  private def uuid()
-
-  = java.util.UUID.randomUUID.toString
-
-  private def validateTransferArgs(transferId: String, donorId: String, recipientId: String, amount: Double): Option[Incorrect]
-
-  = {
-    if (amount <= 0) Some(Incorrect(transferId, donorId, recipientId, amount, msg = "amount must be positive value"))
+  private def validateTransferArgs(transferId: String, donorId: String, recipientId: String, amount: Double): Option[Incorrect] = {
+    if (amount <= 0) Some(Incorrect(transferId, donorId, recipientId, amount, msg = POSITIVE_AMOUNT))
     else {
-      if (donorId == recipientId) Some(Incorrect(transferId, donorId, recipientId, amount, msg = "donor and recipient id's must be different"))
+      if (donorId == recipientId) Some(Incorrect(transferId, donorId, recipientId, amount, msg = SAME_IDS_ERROR))
       else None
     }
   }
+
+  def transferState(transactionId: String): Future[TransferActor.State] =
+    (transferShard ? GetState(transactionId)).mapTo[TransferActor.State]
 }
 
 object TransferService {
+
+  val SAME_IDS_ERROR = "donor and recipient id's must be different"
+  val POSITIVE_AMOUNT = "amount must be positive value"
 
   sealed trait TransferResult {
     val transactionId: String
@@ -68,7 +65,7 @@ object TransferService {
     val amount: Double
   }
 
-  case class Transfered(transactionId: String, donorId: String, recipientId: String, amount: Double, donorBalance: Double) extends TransferResult
+  case class Transferred(transactionId: String, donorId: String, recipientId: String, amount: Double, donorBalance: Double) extends TransferResult
 
   case class InsufficientFunds(transactionId: String, donorId: String, recipientId: String, amount: Double, donorBalance: Double) extends TransferResult
 

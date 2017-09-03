@@ -5,7 +5,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import org.wallet.account.Account
 import org.wallet.account.Account._
-import org.wallet.service.AccountService.{Fail, Response, Success}
+import org.wallet.service.AccountService._
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
@@ -22,28 +22,41 @@ class AccountService(accountsShard: ActorRef) {
       }
 
   def deposit(id: String, amount: Double): Future[Response] =
-    (accountsShard ? Deposit(id, amount)).mapTo[Account.Deposited]
-      .map { a =>
-        Success(a.amount, a.balanceAfter)
-      }
+    if (amount > 0) {
+      (accountsShard ? Deposit(id, amount)).mapTo[Account.Deposited]
+        .map { a =>
+          Success(a.amount, a.balanceAfter)
+        }
+    } else getBalance(id).map {
+      currentBalance =>
+        Fail(-amount, currentBalance.balance, "Deposit amount must be positive value")
+    }
 
-  def withdraw(id: String, amount: Double): Future[Response] = {
-    (accountsShard ? Withdraw(id, amount)).mapTo[Account.Event]
-      .map {
-        case Withdrawn(_, withdrawnAmount, balanceAfter) => Success(-withdrawnAmount, balanceAfter)
-        case InsufficientFunds(_, change, balance) => Fail(-change, balance)
-      }
-  }
-
+  def withdraw(id: String, amount: Double): Future[Response] =
+    if (amount > 0) {
+      (accountsShard ? Withdraw(id, amount)).mapTo[Account.Event]
+        .map {
+          case Withdrawn(_, withdrawnAmount, balanceAfter) => Success(-withdrawnAmount, balanceAfter)
+          case InsufficientFunds(_, change, balance) => Fail(-change, balance, INSUFFICIENT_FUNDS)
+        }
+    } else getBalance(id).map {
+      currentBalance =>
+        Fail(-amount, currentBalance.balance, "Withdrawal amount must be positive value")
+    }
 }
 
 
 object AccountService {
 
-  sealed trait Response
+  val INSUFFICIENT_FUNDS = "Insufficient Funds"
+
+  sealed trait Response {
+    val change: Double
+    val balance: Double
+  }
 
   case class Success(change: Double, balance: Double) extends Response
 
-  case class Fail(change: Double, balance: Double) extends Response
+  case class Fail(change: Double, balance: Double, msg: String) extends Response
 
 }
