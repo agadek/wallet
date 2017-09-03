@@ -6,18 +6,18 @@ case class Account(id: String, balance: Double) {
 
   def process(command: Command): Event = {
     command match {
-      case Deposit(_, amount) => Deposited(id, amount, balance+amount)
-      case Withdraw(_,amount) if checkBalance(amount) => Withdrawn(id, amount, balance-amount)
-      case Withdraw(_,amount) => InsufficientFunds(id, amount, balance)
-      case GetBalance(_) => CurrentBalance(id, balance)
+      case Deposit(cid, _, amount) => Deposited(cid, id, amount, balance+amount)
+      case Withdraw(cid, _,amount) if checkBalance(amount) => Withdrawn(cid, id, amount, balance-amount)
+      case Withdraw(cid, _,amount) => InsufficientFunds(cid, id, amount, balance)
+      case GetBalance(cid, _) => CurrentBalance(cid, id, balance)
     }
   }
 
   def apply(event: Event): Account = event match {
-    case Deposited(_, amount,_) => copy(balance = balance + amount)
-    case Withdrawn(_, amount,_) => copy(balance = balance - amount)
-    case CurrentBalance(_, _) => this
-    case InsufficientFunds(_, _, _) => this
+    case Deposited(cid, _, amount,_) => copy(balance = balance + amount)
+    case Withdrawn(cid, _, amount,_) => copy(balance = balance - amount)
+    case CurrentBalance(cid, _, _) => this
+    case InsufficientFunds(cid, _, _, _) => this
   }
 
   private def checkBalance(amount: Double) = balance >= amount
@@ -26,25 +26,30 @@ case class Account(id: String, balance: Double) {
 object Account {
 
   type AccountId = String
+  type CommandId = String
 
   sealed trait Command{
-    val id:AccountId
+    val commandId:CommandId
+    val accountId:AccountId
   }
 
-  case class Deposit(id:AccountId, amount: Double) extends Command
+  case class Deposit(commandId:CommandId, accountId:AccountId, amount: Double) extends Command
 
-  case class Withdraw(id:AccountId, amount: Double) extends Command
+  case class Withdraw(commandId:CommandId, accountId:AccountId, amount: Double) extends Command
 
-  case class GetBalance(id:AccountId) extends Command
+  case class GetBalance(commandId:CommandId, accountId:AccountId) extends Command
 
-  sealed trait Event
+  sealed trait Event{
+    val commandId:CommandId
+    val accountId:AccountId
+  }
 
-  case class Deposited(id:AccountId, amount: Double, balanceAfter:Double) extends Event
+  case class Deposited(commandId:CommandId, accountId:AccountId, amount: Double, balanceAfter:Double) extends Event
 
-  case class Withdrawn(id:AccountId, amount: Double, balanceAfter:Double) extends Event
+  case class Withdrawn(commandId:CommandId, accountId:AccountId, amount: Double, balanceAfter:Double) extends Event
 
-  case class CurrentBalance(id:AccountId, balance: Double) extends Event
+  case class CurrentBalance(commandId:CommandId, accountId:AccountId, balance: Double) extends Event
 
-  case class InsufficientFunds(id:AccountId, amount: Double, balance:Double) extends Event
+  case class InsufficientFunds(commandId:CommandId, accountId:AccountId, amount: Double, balance:Double) extends Event
 
 }

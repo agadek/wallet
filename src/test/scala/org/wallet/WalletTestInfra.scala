@@ -23,7 +23,7 @@ trait WalletTestInfra {
   val transferService = new TransferService(transferShard)
 
   def accountsHashMapping: ConsistentHashMapping = {
-    case command: Account.Command => command.id
+    case command: Account.Command => command.accountId
   }
 
   def transferHashMapping: ConsistentHashMapping = {

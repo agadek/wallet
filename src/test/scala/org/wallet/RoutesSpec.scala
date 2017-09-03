@@ -1,16 +1,11 @@
 package org.wallet
 
-import akka.actor.ActorRef
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-import akka.routing.ConsistentHashingPool
-import akka.routing.ConsistentHashingRouter.ConsistentHashMapping
 import org.scalatest.{Matchers, WordSpecLike}
-import org.wallet.account.{Account, AccountActor}
 import org.wallet.routes.Routes
 import org.wallet.service.{AccountService, TransferService}
-import org.wallet.transfer.TransferActor
 
 import scala.concurrent.Await
 import scala.concurrent.duration._

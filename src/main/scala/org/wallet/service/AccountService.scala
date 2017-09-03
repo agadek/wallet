@@ -14,16 +14,17 @@ import scala.concurrent.duration._
 
 class AccountService(accountsShard: ActorRef) {
   implicit val timeout = Timeout(5 seconds)
+  private def uuid() = java.util.UUID.randomUUID.toString
 
   def getBalance(id: String): Future[Response] =
-    (accountsShard ? GetBalance(id)).mapTo[Account.CurrentBalance]
+    (accountsShard ? GetBalance(uuid(), id)).mapTo[Account.CurrentBalance]
       .map { a =>
         Success(0d, a.balance)
       }
 
   def deposit(id: String, amount: Double): Future[Response] =
     if (amount > 0) {
-      (accountsShard ? Deposit(id, amount)).mapTo[Account.Deposited]
+      (accountsShard ? Deposit(uuid(), id, amount)).mapTo[Account.Deposited]
         .map { a =>
           Success(a.amount, a.balanceAfter)
         }
@@ -34,10 +35,10 @@ class AccountService(accountsShard: ActorRef) {
 
   def withdraw(id: String, amount: Double): Future[Response] =
     if (amount > 0) {
-      (accountsShard ? Withdraw(id, amount)).mapTo[Account.Event]
+      (accountsShard ? Withdraw(uuid(), id, amount)).mapTo[Account.Event]
         .map {
-          case Withdrawn(_, withdrawnAmount, balanceAfter) => Success(-withdrawnAmount, balanceAfter)
-          case InsufficientFunds(_, change, balance) => Fail(-change, balance, INSUFFICIENT_FUNDS)
+          case Withdrawn(_, _, withdrawnAmount, balanceAfter) => Success(-withdrawnAmount, balanceAfter)
+          case InsufficientFunds(_, _, change, balance) => Fail(-change, balance, INSUFFICIENT_FUNDS)
         }
     } else getBalance(id).map {
       currentBalance =>

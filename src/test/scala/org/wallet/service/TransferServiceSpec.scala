@@ -1,15 +1,12 @@
 package org.wallet.service
 
-import akka.actor.{ActorRef, ActorSystem}
-import akka.routing.ConsistentHashingPool
+import akka.actor.ActorSystem
 import akka.testkit.{ImplicitSender, TestKit}
 import akka.util.Timeout
 import org.scalatest.{FunSpecLike, Matchers}
 import org.wallet.WalletTestInfra
-import org.wallet.account.AccountActor
-import org.wallet.service.AccountService.{Fail, Success}
+import org.wallet.service.AccountService.Success
 import org.wallet.service.TransferService.{Incorrect, InsufficientFunds, Transferred}
-import org.wallet.transfer.TransferActor
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
