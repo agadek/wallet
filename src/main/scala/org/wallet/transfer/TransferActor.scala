@@ -1,36 +1,40 @@
 package org.wallet.transfer
 
 
-import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, Props}
+import akka.actor.{ActorLogging, ActorRef, ActorSystem, Props}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.pattern.pipe
+import akka.persistence.PersistentActor
 import org.wallet.service.AccountService
 import org.wallet.transfer.TransferActor._
 
 import scala.concurrent.Future
 
 
+//todo rewrite to fsm
 class TransferActor(deposit: Deposit,
-                    withdraw: Withdraw) extends Actor with ActorLogging {
-
-  val transferId: String = self.path.name
-
+                    withdraw: Withdraw) extends PersistentActor with ActorLogging {
   import context._
+
+  override val persistenceId: String = self.path.name
 
   var command: Option[Transfer] = None
   var source: Option[ActorRef] = None
 
-  override def receive: Receive = {
+  override def receiveCommand: Receive = {
     case transfer: Transfer =>
-      log.info("transfer {} processing: {}", transferId, transfer)
-      withdraw(transfer.donorId, transfer.amount) pipeTo self
-      command = Some(transfer)
+      persist((transfer, sender())) { case (persistedTransfer, sender) =>
 
-      transfer match {
-        case _: SyncTransfer => source = Some(sender())
-        case _ =>
+        log.info("transfer {} processing: {}", persistenceId, persistedTransfer)
+        withdraw(transfer.transferId, persistedTransfer.donorId, persistedTransfer.amount) pipeTo self
+        command = Some(persistedTransfer)
+
+        persistedTransfer match {
+          case _: SyncTransfer => source = Some(sender)
+          case _ =>
+        }
+        context become withdrawalState().orElse(unexpectedMsgHandling("init"))
       }
-      context become withdrawalState().orElse(unexpectedMsgHandling("init"))
 
     case GetState(_) => sender() ! Uninitialized()
     case msg => unexpectedMsgHandling("uninitialized")(msg)
@@ -38,14 +42,14 @@ class TransferActor(deposit: Deposit,
 
   def withdrawalState(): Receive = {
     case AccountService.Success(amount, balance) =>
-      log.info("transfer {} withdrawal succeeded", transferId)
+      log.info("transfer {} withdrawal succeeded", persistenceId)
       command.foreach { command =>
-        deposit(command.recipientId, command.amount) pipeTo self
+        deposit(command.transferId, command.recipientId, command.amount) pipeTo self
       }
       context become depositState(balance)
 
     case AccountService.Fail(amount, balance, msg) =>
-      log.info("transfer {} withdrawal failed", transferId)
+      log.info("transfer {} withdrawal failed", persistenceId)
       context become failedState(balance, msg)
       for {
         source <- source
@@ -54,14 +58,14 @@ class TransferActor(deposit: Deposit,
 
     case GetState(_) =>
       command.foreach { command =>
-        sender() ! ProcessingWithdrawal(transferId, command.donorId, command.recipientId, command.amount)
+        sender() ! ProcessingWithdrawal(persistenceId, command.donorId, command.recipientId, command.amount)
       }
     case msg => unexpectedMsgHandling("withdrawal")(msg)
   }
 
   def depositState(donorBalance: Double): Receive = {
     case AccountService.Success(amount, balance) =>
-      log.info("transfer {} deposit succeeded", transferId)
+      log.info("transfer {} deposit succeeded", persistenceId)
       context become successState(donorBalance).orElse(unexpectedMsgHandling("success"))
       for {
         source <- source
@@ -70,7 +74,7 @@ class TransferActor(deposit: Deposit,
 
     case GetState(_) =>
       command.foreach { command =>
-        sender() ! ProcessingDeposit(transferId, command.donorId, command.recipientId, command.amount)
+        sender() ! ProcessingDeposit(persistenceId, command.donorId, command.recipientId, command.amount)
       }
     case msg => unexpectedMsgHandling("deposit")(msg)
   }
@@ -78,7 +82,7 @@ class TransferActor(deposit: Deposit,
   def successState(donorBalance: Double): Receive = {
     case GetState(_) =>
       command.foreach { command =>
-        sender() ! Succeeded(transferId, command.donorId, command.recipientId, command.amount)
+        sender() ! Succeeded(persistenceId, command.donorId, command.recipientId, command.amount)
       }
     case msg => unexpectedMsgHandling("success")(msg)
   }
@@ -88,7 +92,7 @@ class TransferActor(deposit: Deposit,
       command.foreach { command =>
         sender() ! Failed(command.transferId, command.donorId, command.recipientId, command.amount, msg)
       }
-    case msg => unexpectedMsgHandling("failed")(msg)
+    case other => unexpectedMsgHandling("failed")(other)
   }
 
   def unexpectedMsgHandling(stateName: String): Receive = {
@@ -107,14 +111,20 @@ class TransferActor(deposit: Deposit,
     }
 
     case msg => log.error("state {}, got msg: {}", stateName, msg)
+  }
 
+
+
+  override def receiveRecover: Receive = {
+    case (transfer: Transfer, sender: ActorRef) =>
+      self.tell(transfer,sender)
   }
 }
 
 
 object TransferActor {
-  type Deposit = (String, Double) => Future[AccountService.Response]
-  type Withdraw = (String, Double) => Future[AccountService.Response]
+  type Deposit = (String, String, Double) => Future[AccountService.Response]
+  type Withdraw = (String, String, Double) => Future[AccountService.Response]
   private val numberOfShards = 10
 
   private val extractEntityId: ShardRegion.ExtractEntityId = {
@@ -175,4 +185,5 @@ object TransferActor {
   case class InsufficientFunds(transferId: String, donorId: String, recipientId: String, amount: Double, donorBalance: Double) extends Event
 
   case class CommandRejected(transferId: String, donorId: String, recipientId: String, amount: Double) extends Event
+
 }
