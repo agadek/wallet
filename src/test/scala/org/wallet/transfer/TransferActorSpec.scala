@@ -1,26 +1,22 @@
 package org.wallet.transfer
 
-import akka.actor.{ActorSystem, PoisonPill}
+import akka.actor.{ActorSystem, _}
+import akka.pattern.{ask, gracefulStop}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
+import akka.util.Timeout
 import org.scalatest.{FunSpecLike, Matchers}
+import org.wallet.service.AccountService
 import org.wallet.service.AccountService.{Fail, Success}
 import org.wallet.transfer.TransferActor.{InsufficientFunds, SyncTransfer, Transferred}
-import akka.pattern.ask
-import org.wallet.service.AccountService
 
-import scala.concurrent.duration._
-import akka.actor._
-import akka.pattern.gracefulStop
-import akka.util.Timeout
-
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 
 
-class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with FunSpecLike with Matchers with ImplicitSender {
+class TransferActorSpec extends TestKit(ActorSystem("TransferActorSpec")) with FunSpecLike with Matchers with ImplicitSender {
+  val registratorMock: ActorRef = TestProbe().ref
 
   describe("TransferActor should process atomic transaction") {
     it("transfer happy path") {
@@ -33,7 +29,8 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val probe = TestProbe()
       val transfer = system.actorOf(TransferActor.props(
         deposit = (tid:String, id: String, change: Double) => Future(Success(change, change)),
-        withdraw = (tid:String, id: String, change: Double) => Future(Success(change, 13d))), tid)
+        withdraw = (tid:String, id: String, change: Double) => Future(Success(change, 13d)),
+        registratorMock), tid)
 
       //when
       val command = SyncTransfer(tid, did, rid, amount)
@@ -53,7 +50,8 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
       val probe = TestProbe()
       val transfer = system.actorOf(TransferActor.props(
         deposit = (tid:String, id: String, change: Double) => Future(Success(change, change)),
-        withdraw = (tid:String, id: String, change: Double) => Future(Fail(change, 10d, ""))), tid)
+        withdraw = (tid:String, id: String, change: Double) => Future(Fail(change, 10d, "")),
+        registratorMock), tid)
 
       //when
       val command = SyncTransfer(tid, did, rid, amount)
@@ -76,7 +74,8 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
 
       val transfer = system.actorOf(TransferActor.props(
         deposit = (tid:String, id: String, change: Double) => Future(Success(change, change)),
-        withdraw = (tid:String, id: String, change: Double) => (probe.ref ? (tid,id,change)).mapTo[AccountService.Response] ), tid)
+        withdraw = (tid:String, id: String, change: Double) => (probe.ref ? (tid,id,change)).mapTo[AccountService.Response],
+        registratorMock), tid)
 
       //when
       val command = SyncTransfer(tid, did, rid, amount)
@@ -90,7 +89,8 @@ class TransferActorSpec extends TestKit(ActorSystem("AccountActorSpec")) with Fu
 
       val transfer2 = system.actorOf(TransferActor.props(
         deposit = (tid:String, id: String, change: Double) => Future(Success(change, change)),
-        withdraw = (tid:String, id: String, change: Double) => (probe.ref ? (tid,id,change)).mapTo[AccountService.Response] ), tid)
+        withdraw = (tid:String, id: String, change: Double) => (probe.ref ? (tid,id,change)).mapTo[AccountService.Response],
+        registratorMock), tid)
 
       probe.expectMsg((tid,did,amount))
     }

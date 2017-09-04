@@ -7,13 +7,15 @@ import akka.pattern.pipe
 import akka.persistence.PersistentActor
 import org.wallet.service.AccountService
 import org.wallet.transfer.TransferActor._
+import org.wallet.transfer.TransferRegisterActor.{RegisterTransaction, TransactionCompleted, WakeUp}
 
 import scala.concurrent.Future
 
 
 //todo rewrite to fsm
 class TransferActor(deposit: Deposit,
-                    withdraw: Withdraw) extends PersistentActor with ActorLogging {
+                    withdraw: Withdraw,
+                    transferRegister:ActorRef) extends PersistentActor with ActorLogging {
   import context._
 
   override val persistenceId: String = self.path.name
@@ -33,10 +35,13 @@ class TransferActor(deposit: Deposit,
           case _: SyncTransfer => source = Some(sender)
           case _ =>
         }
+
+        transferRegister ! RegisterTransaction(persistenceId)
         context become withdrawalState().orElse(unexpectedMsgHandling("init"))
       }
 
     case GetState(_) => sender() ! Uninitialized()
+    case WakeUp(_) => log.info("WakeUp msg recived")
     case msg => unexpectedMsgHandling("uninitialized")(msg)
   }
 
@@ -55,6 +60,7 @@ class TransferActor(deposit: Deposit,
         source <- source
         command <- command
       } yield source ! InsufficientFunds(command.transferId, command.donorId, command.recipientId, command.amount, balance)
+      transferRegister ! TransactionCompleted(persistenceId)
 
     case GetState(_) =>
       command.foreach { command =>
@@ -71,6 +77,7 @@ class TransferActor(deposit: Deposit,
         source <- source
         command <- command
       } yield source ! Transferred(command.transferId, command.donorId, command.recipientId, command.amount, donorBalance)
+      transferRegister ! TransactionCompleted(persistenceId)
 
     case GetState(_) =>
       command.foreach { command =>
@@ -130,25 +137,28 @@ object TransferActor {
   private val extractEntityId: ShardRegion.ExtractEntityId = {
     case transfer: Transfer => (transfer.transferId, transfer)
     case msg: GetState => (msg.transferId, msg)
+    case msg: WakeUp => (msg.transferId, msg)
   }
 
   private val extractShardId: ShardRegion.ExtractShardId = {
     case transfer: Transfer => scala.math.abs(transfer.transferId.hashCode % numberOfShards).toString
     case msg: GetState => scala.math.abs(msg.transferId.hashCode % numberOfShards).toString
-
+    case WakeUp(transferId) => scala.math.abs(transferId.hashCode % numberOfShards).toString
   }
 
   def shard(system: ActorSystem,
             deposit: Deposit,
-            withdraw: Withdraw): ActorRef = ClusterSharding(system).start(
+            withdraw: Withdraw,
+            registrator:ActorRef): ActorRef = ClusterSharding(system).start(
     typeName = "transfer",
-    entityProps = props(deposit, withdraw),
+    entityProps = props(deposit, withdraw, registrator),
     settings = ClusterShardingSettings(system),
     extractEntityId = extractEntityId,
     extractShardId = extractShardId)
 
   def props(deposit: Deposit,
-            withdraw: Withdraw) = Props(new TransferActor(deposit, withdraw))
+            withdraw: Withdraw,
+            transferRegister:ActorRef) = Props(new TransferActor(deposit, withdraw, transferRegister))
 
   sealed trait State
 

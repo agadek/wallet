@@ -8,7 +8,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.wallet.account.AccountActor
 import org.wallet.routes.Routes
 import org.wallet.service.{AccountService, TransferService}
-import org.wallet.transfer.TransferActor
+import org.wallet.transfer.TransferRegisterActor.ShardConfig
+import org.wallet.transfer.{TransferActor, TransferRegisterActor}
 
 import scala.util.{Failure, Success}
 
@@ -21,7 +22,10 @@ object WalletApp extends App with LazyLogging{
 
   val accountsService = new AccountService(accountsShard)
 
-  val transferShard = TransferActor.shard(system, accountsService.deposit, accountsService.withdraw)
+  //todo change to distributed poll or cluster singleton
+  val transferRegistrator = system.actorOf(TransferRegisterActor.props())
+  val transferShard = TransferActor.shard(system, accountsService.deposit, accountsService.withdraw, transferRegistrator)
+  transferRegistrator ! ShardConfig(transferRegistrator)
 
   val transferService = new TransferService(transferShard)
 
