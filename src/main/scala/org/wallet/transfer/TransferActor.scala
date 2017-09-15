@@ -37,8 +37,8 @@ class TransferActor(deposit: Deposit,
         }
 
         transferRegister ! RegisterTransaction(persistenceId)
-        context become withdrawalState().orElse(unexpectedMsgHandling("init"))
       }
+      context become withdrawalState()
 
     case GetState(_) => sender() ! Uninitialized()
     case WakeUp(_) => log.info("WakeUp msg recived")
@@ -72,7 +72,7 @@ class TransferActor(deposit: Deposit,
   def depositState(donorBalance: Double): Receive = {
     case AccountService.Success(amount, balance) =>
       log.info("transfer {} deposit succeeded", persistenceId)
-      context become successState(donorBalance).orElse(unexpectedMsgHandling("success"))
+      context become successState(donorBalance)
       for {
         source <- source
         command <- command
@@ -115,6 +115,7 @@ class TransferActor(deposit: Deposit,
         sender() ! CommandRejected(transferCommand.transferId, transferCommand.donorId, transferCommand.recipientId, transferCommand.amount)
 
       case None =>
+        log.error("state inconsistency {}, got msg: {}", stateName, transferCommand)
     }
 
     case msg => log.error("state {}, got msg: {}", stateName, msg)
