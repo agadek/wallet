@@ -8,6 +8,8 @@ lazy val akkaVersion = "2.5.3"
 lazy val akkaHttpVersion = "10.0.9"
 
 libraryDependencies ++= Seq(
+  "org.typelevel" %% "cats-core" % "1.0.0-MF",
+  "org.typelevel" %% "cats-effect" % "0.4",
   "com.typesafe.akka" %% "akka-actor" % akkaVersion,
   "com.typesafe.akka" %% "akka-remote" % akkaVersion,
   "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
