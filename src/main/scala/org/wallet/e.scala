@@ -67,6 +67,7 @@ println(e.getClass().getCanonicalName)
   import cats.implicits._
 
   Monad[Option].ifM(Option(true))(Option("truthy"), Option("falsy")) should be(
+
     Option("truthy")
   )
   Monad[List].ifM(List(true, false, true))(List(1, 2), List(3, 4)) should be(
